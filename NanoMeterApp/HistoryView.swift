@@ -45,6 +45,10 @@ struct HistoryView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            editingNote = n
+                        }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             Button {
                                 editingNote = n
@@ -90,9 +94,6 @@ struct HistoryView: View {
                         }
                         .disabled(notes.notes.isEmpty)
                     }
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    EditButton()
                 }
             }
             .alert("导出结果", isPresented: .constant(exportResult != nil), actions: {
