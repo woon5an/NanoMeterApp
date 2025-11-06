@@ -288,38 +288,36 @@ struct ContentView: View {
         .buttonStyle(.borderedProminent)
     }
 
+    @ViewBuilder
     private var heatmapOverlay: some View {
-        Group {
-            if cameraService.isHeatmapEnabled {
-                GeometryReader { geo in
-                    let rows = cameraService.heatmapCells.count
-                    let cols = cameraService.heatmapCells.first?.count ?? 0
-                    if rows > 0, cols > 0 {
-                        ForEach(0..<rows, id: \.self) { r in
-                            ForEach(0..<cols, id: \.self) { c in
-                                let cellWidth = geo.size.width / CGFloat(cols)
-                                let cellHeight = geo.size.height / CGFloat(rows)
-                                Rectangle()
-                                    .fill(heatColor(for: cameraService.heatmapCells[r][c]).opacity(0.35))
-                                    .frame(width: cellWidth, height: cellHeight)
-                                    .position(x: (CGFloat(c) + 0.5) * cellWidth,
-                                              y: (CGFloat(r) + 0.5) * cellHeight)
-                            }
+        if cameraService.isHeatmapEnabled {
+            GeometryReader { geo in
+                let rows = cameraService.heatmapCells.count
+                let cols = cameraService.heatmapCells.first?.count ?? 0
+                if rows > 0, cols > 0 {
+                    ForEach(0..<rows, id: \.self) { r in
+                        ForEach(0..<cols, id: \.self) { c in
+                            let cellWidth = geo.size.width / CGFloat(cols)
+                            let cellHeight = geo.size.height / CGFloat(rows)
+                            Rectangle()
+                                .fill(heatColor(for: cameraService.heatmapCells[r][c]).opacity(0.35))
+                                .frame(width: cellWidth, height: cellHeight)
+                                .position(x: (CGFloat(c) + 0.5) * cellWidth,
+                                          y: (CGFloat(r) + 0.5) * cellHeight)
                         }
                     }
                 }
-                .allowsHitTesting(false)
             }
+            .allowsHitTesting(false)
         }
     }
 
+    @ViewBuilder
     private var spotOverlay: some View {
-        Group {
-            if cameraService.meteringMode == .spot {
-                CrosshairShape(normalizedPoint: cameraService.spotPoint)
-                    .stroke(Color.yellow.opacity(0.9), lineWidth: 2)
-                    .allowsHitTesting(false)
-            }
+        if cameraService.meteringMode == .spot {
+            CrosshairShape(normalizedPoint: cameraService.spotPoint)
+                .stroke(Color.yellow.opacity(0.9), lineWidth: 2)
+                .allowsHitTesting(false)
         }
     }
 
