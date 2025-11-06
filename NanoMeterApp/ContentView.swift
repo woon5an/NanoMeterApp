@@ -404,6 +404,12 @@ private struct EquivalentExposureTable: View {
             return .orange
         }
     }
+
+private func heatColor(for value: CGFloat) -> Color {
+        let clamped = min(max(Double(value), 0.0), 1.0)
+        let hue = (1.0 - clamped) * 0.6 // 蓝 -> 黄 -> 红
+        return Color(hue: hue, saturation: 0.85, brightness: 0.95)
+    }
 }
 
 private struct PreviewSizeKey: PreferenceKey {
