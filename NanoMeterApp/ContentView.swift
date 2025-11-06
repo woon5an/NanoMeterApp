@@ -199,7 +199,7 @@ struct ContentView: View {
     private var controlsCard: some View {
         let baseEV = cam.currentEV100()
         let sceneEV = cam.evForSelectedMode(baseEV: baseEV)
-        let suggestions = engine.equivalentExposures(ev100: sceneEV, isoString: camera.iso)
+        let suggestions = engine.equivalentExposures(sceneEV: sceneEV, isoString: camera.iso)
 
         return GroupBox {
             VStack(spacing: 16) {

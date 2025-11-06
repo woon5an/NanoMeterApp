@@ -15,13 +15,13 @@ final class NanoMeterEngine: ObservableObject {
         return log2((aperture * aperture) / shutter) - log2(iso / 100.0)
     }
 
-    func equivalentExposures(ev100: Double, isoString: String) -> [ExposureSuggestion] {
-        guard ev100.isFinite, let iso = Double(isoString), iso > 0 else { return [] }
+    func equivalentExposures(sceneEV: Double, isoString: String) -> [ExposureSuggestion] {
+        guard sceneEV.isFinite, let iso = Double(isoString), iso > 0 else { return [] }
 
         let shutterOptions = NanoMeterEngine.shutterOptions
         guard !shutterOptions.isEmpty else { return [] }
 
-        let powFactor = pow(2.0, ev100) * (iso / 100.0)
+        let powFactor = pow(2.0, sceneEV) * (iso / 100.0)
 
         let suggestions: [ExposureSuggestion] = CameraSettings.apertures.compactMap { apertureString -> ExposureSuggestion? in
             guard let aperture = Double(apertureString) else { return nil }
@@ -32,7 +32,7 @@ final class NanoMeterEngine: ObservableObject {
             }
 
             let comboEV = ev100(aperture: aperture, shutter: closest.seconds, iso: iso)
-            let delta = comboEV - ev100
+            let delta = comboEV - sceneEV
 
             return ExposureSuggestion(apertureLabel: "ƒ\(apertureString)",
                                       shutterLabel: closest.label,
