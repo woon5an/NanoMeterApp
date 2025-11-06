@@ -395,6 +395,135 @@ private struct ExposureSuggestionTable: View {
             return .orange
         }
     }
+
+    private var recordButton: some View {
+        let baseEV = cameraService.currentEV100()
+        let sceneEV = cameraService.evForSelectedMode(baseEV: baseEV)
+        return Button {
+            let note = ExposureNote(aperture: camera.aperture,
+                                    shutter: camera.shutter,
+                                    iso: camera.iso,
+                                    ev: sceneEV)
+            notes.add(note: note)
+        } label: {
+            Label("记录曝光笔记", systemImage: "plus.viewfinder")
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+        }
+        .frame(maxWidth: .infinity)
+        .buttonStyle(.borderedProminent)
+    }
+
+    @ViewBuilder
+    private var heatmapOverlay: some View {
+        if cameraService.isHeatmapEnabled {
+            GeometryReader { geo in
+                let rows = cameraService.heatmapCells.count
+                let cols = cameraService.heatmapCells.first?.count ?? 0
+                if rows > 0, cols > 0 {
+                    ForEach(0..<rows, id: \.self) { r in
+                        ForEach(0..<cols, id: \.self) { c in
+                            let cellWidth = geo.size.width / CGFloat(cols)
+                            let cellHeight = geo.size.height / CGFloat(rows)
+                            Rectangle()
+                                .fill(heatColor(for: cameraService.heatmapCells[r][c]).opacity(0.35))
+                                .frame(width: cellWidth, height: cellHeight)
+                                .position(x: (CGFloat(c) + 0.5) * cellWidth,
+                                          y: (CGFloat(r) + 0.5) * cellHeight)
+                        }
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private var spotOverlay: some View {
+        Group {
+            if cameraService.meteringMode == .spot {
+                CrosshairShape(normalizedPoint: cameraService.spotPoint)
+                    .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .foregroundStyle(Color.yellow.opacity(0.9))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func heatColor(for value: CGFloat) -> Color {
+        let clamped = min(max(Double(value), 0.0), 1.0)
+        let hue = (1.0 - clamped) * 0.6 // 蓝 -> 黄 -> 红
+        return Color(hue: hue, saturation: 0.85, brightness: 0.95)
+    }
+}
+
+private struct ExposureSuggestionTable: View {
+    let sceneEV: Double
+    let suggestions: [NanoMeterEngine.ExposureSuggestion]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("基于当前实测 EV100 \(String(format: "%.2f", sceneEV)) 计算")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if suggestions.isEmpty {
+                Text("暂无可用的标准组合，请调整 ISO 或重新测光。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(suggestions) { suggestion in
+                        HStack(spacing: 12) {
+                            Text(suggestion.apertureLabel)
+                                .font(.system(.body, design: .rounded))
+                                .monospacedDigit()
+
+                            Spacer(minLength: 12)
+
+                            Text(suggestion.shutterLabel)
+                                .font(.system(.body, design: .rounded))
+                                .monospacedDigit()
+
+                            Spacer(minLength: 12)
+
+                            Text(suggestion.isoLabel)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 12)
+
+                            Text(String(format: "%+.2f EV", suggestion.deltaEV))
+                                .font(.footnote)
+                                .monospacedDigit()
+                                .foregroundStyle(deltaColor(for: suggestion.deltaEV))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white.opacity(0.05))
+                        )
+                    }
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: suggestions.count)
+    }
+
+    private func deltaColor(for delta: Double) -> Color {
+        let absDelta = abs(delta)
+        switch absDelta {
+        case 0..<0.15:
+            return .green
+        case 0.15..<0.35:
+            return .yellow
+        default:
+            return .orange
+        }
+    }
 }
 
 private struct CrosshairShape: Shape {
