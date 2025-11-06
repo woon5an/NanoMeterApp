@@ -1,0 +1,2 @@
+import Foundation
+struct ExposureNote:Identifiable,Codable{ var id:UUID=UUID(); var date:Date=Date(); var aperture:String="8"; var shutter:String="1/125"; var iso:String="400"; var ev:Double=0; var latitude:Double?; var longitude:Double? }
