@@ -23,7 +23,7 @@ final class NanoMeterEngine: ObservableObject {
 
         let powFactor = pow(2.0, ev100) * (iso / 100.0)
 
-        let suggestions: [ExposureSuggestion] = CameraSettings.apertures.compactMap { apertureString in
+        let suggestions = CameraSettings.apertures.compactMap { apertureString in
             guard let aperture = Double(apertureString) else { return nil }
 
             let targetShutterSeconds = (aperture * aperture) / powFactor
