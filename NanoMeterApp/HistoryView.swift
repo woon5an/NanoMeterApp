@@ -5,41 +5,79 @@
 //  Created by Woonsan on 2025/11/5.
 //
 
-import SwiftUI
 import Photos
+import SwiftUI
 
 struct HistoryView: View {
     @EnvironmentObject var notes: NotesStore
     @Environment(\.dismiss) var dismiss
-    @State private var exporting = false
     @State private var exportResult: String?
 
     var body: some View {
         NavigationView {
             List {
-                ForEach(notes.notes) { n in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(n.date.formatted(date: .abbreviated, time: .standard))
-                            .font(.caption).foregroundStyle(.secondary)
-                        Text("ƒ\(n.aperture) · \(n.shutter)s · ISO \(n.iso)")
+                if notes.notes.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("暂无笔记")
                             .font(.headline)
-                        Text(String(format: "EV100 %.2f", n.ev))
-                            .font(.subheadline).foregroundStyle(.secondary)
+                        Text("回到主界面记录一条曝光笔记吧。")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 4)
-                    .contextMenu {
-                        Button {
-                            export(note: n)
-                        } label: {
-                            Label("导出到相册", systemImage: "square.and.arrow.down")
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 48)
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(notes.notes) { n in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(n.date.formatted(date: .abbreviated, time: .standard))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("ƒ\(n.aperture) · \(n.shutter)s · ISO \(n.iso)")
+                                .font(.headline)
+                                .monospacedDigit()
+                            Text(String(format: "EV100 %.2f", n.ev))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 6)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                notes.delete(n)
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
+                        .contextMenu {
+                            Button {
+                                export(note: n)
+                            } label: {
+                                Label("导出到相册", systemImage: "square.and.arrow.down")
+                            }
                         }
                     }
+                    .onDelete(perform: notes.remove)
                 }
             }
+            .animation(.default, value: notes.notes)
             .navigationTitle("曝光笔记")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if let document = notes.exportCSVDocument() {
+                        ShareLink(item: document, preview: SharePreview("NanoMeter 笔记", image: Image(systemName: "square.grid.3x3.fill"))) {
+                            Label("分享 CSV", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(notes.notes.isEmpty)
+                    }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    EditButton()
                 }
             }
             .alert("导出结果", isPresented: .constant(exportResult != nil), actions: {
