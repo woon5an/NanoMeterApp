@@ -1,5 +1,21 @@
 import SwiftUI
 
+private enum ExposureMode: String, CaseIterable, Identifiable {
+    case manual
+    case table
+
+    var id: ExposureMode { self }
+
+    var title: String {
+        switch self {
+        case .manual:
+            return "手动调节"
+        case .table:
+            return "参考组合"
+        }
+    }
+}
+
 struct ContentView: View {
     @StateObject private var camera = CameraSettings()
     @StateObject private var engine = NanoMeterEngine()
@@ -11,6 +27,7 @@ struct ContentView: View {
     @State private var showHistory = false
     @State private var showSettings = false
     @State private var previewSize: CGSize = .zero
+    @State private var exposureMode: ExposureMode = .manual
 
     var body: some View {
         NavigationView {
@@ -180,48 +197,74 @@ struct ContentView: View {
     }
 
     private var controlsCard: some View {
-        GroupBox {
+        let baseEV = cam.currentEV100()
+        let sceneEV = cam.evForSelectedMode(baseEV: baseEV)
+        let suggestions = engine.equivalentExposures(ev100: sceneEV, isoString: camera.iso)
+
+        return GroupBox {
             VStack(spacing: 16) {
-                Picker("光圈", selection: $camera.aperture) {
-                    ForEach(CameraSettings.apertures, id: \.self) { f in
-                        Text("ƒ\(f)").tag(f)
+                Picker("模式", selection: $exposureMode) {
+                    ForEach(ExposureMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
                     }
                 }
-                .pickerStyle(.wheel)
-                .frame(height: 110)
+                .pickerStyle(.segmented)
 
-                Picker("快门", selection: $camera.shutter) {
-                    ForEach(CameraSettings.shutters, id: \.self) { s in
-                        Text(s).tag(s)
-                    }
+                switch exposureMode {
+                case .manual:
+                    manualControls
+                case .table:
+                    EquivalentExposureTable(sceneEV: sceneEV, suggestions: suggestions)
                 }
-                .pickerStyle(.wheel)
-                .frame(height: 110)
 
-                VStack(spacing: 12) {
-                    Picker("ISO", selection: $camera.iso) {
-                        ForEach(FilmPresets.isoList(), id: \.self) { iso in
-                            Text(iso).tag(iso)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Picker("胶卷预设", selection: $selectedFilm) {
-                        Text("手动").tag(nil as FilmPreset?)
-                        ForEach(FilmPresets.defaultFilms) { film in
-                            Text(film.name).tag(film as FilmPreset?)
-                        }
-                    }
-                    .onChange(of: selectedFilm) { film in
-                        if let film = film { camera.iso = String(film.iso) }
-                    }
-                }
+                isoSelection
             }
             .padding(.top, 6)
         } label: {
             Label("参数设定", systemImage: "dial.low")
         }
         .groupBoxStyle(CardGroupBoxStyle())
+    }
+
+    private var manualControls: some View {
+        VStack(spacing: 16) {
+            Picker("光圈", selection: $camera.aperture) {
+                ForEach(CameraSettings.apertures, id: \.self) { f in
+                    Text("ƒ\(f)").tag(f)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(height: 110)
+
+            Picker("快门", selection: $camera.shutter) {
+                ForEach(CameraSettings.shutters, id: \.self) { s in
+                    Text(s).tag(s)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(height: 110)
+        }
+    }
+
+    private var isoSelection: some View {
+        VStack(spacing: 12) {
+            Picker("ISO", selection: $camera.iso) {
+                ForEach(FilmPresets.isoList(), id: \.self) { iso in
+                    Text(iso).tag(iso)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Picker("胶卷预设", selection: $selectedFilm) {
+                Text("手动").tag(nil as FilmPreset?)
+                ForEach(FilmPresets.defaultFilms) { film in
+                    Text(film.name).tag(film as FilmPreset?)
+                }
+            }
+            .onChange(of: selectedFilm) { film in
+                if let film = film { camera.iso = String(film.iso) }
+            }
+        }
     }
 
     private var recordButton: some View {
@@ -283,10 +326,79 @@ struct ContentView: View {
         }
     }
 
-    private func heatColor(for value: CGFloat) -> Color {
+private func heatColor(for value: CGFloat) -> Color {
         let clamped = min(max(Double(value), 0.0), 1.0)
         let hue = (1.0 - clamped) * 0.6 // 蓝 -> 黄 -> 红
         return Color(hue: hue, saturation: 0.85, brightness: 0.95)
+    }
+}
+
+private struct EquivalentExposureTable: View {
+    let sceneEV: Double
+    let suggestions: [NanoMeterEngine.ExposureSuggestion]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("基于当前实测 EV100 \(String(format: "%.2f", sceneEV)) 计算")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if suggestions.isEmpty {
+                Text("暂无可用的标准组合，请调整 ISO 或重新测光。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(suggestions) { suggestion in
+                        HStack(spacing: 12) {
+                            Text(suggestion.apertureLabel)
+                                .font(.system(.body, design: .rounded))
+                                .monospacedDigit()
+
+                            Spacer(minLength: 12)
+
+                            Text(suggestion.shutterLabel)
+                                .font(.system(.body, design: .rounded))
+                                .monospacedDigit()
+
+                            Spacer(minLength: 12)
+
+                            Text(suggestion.isoLabel)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 12)
+
+                            Text(String(format: "%+.2f EV", suggestion.deltaEV))
+                                .font(.footnote)
+                                .monospacedDigit()
+                                .foregroundStyle(deltaColor(for: suggestion.deltaEV))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white.opacity(0.05))
+                        )
+                    }
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: suggestions.count)
+    }
+
+    private func deltaColor(for delta: Double) -> Color {
+        let absDelta = abs(delta)
+        switch absDelta {
+        case 0..<0.15:
+            return .green
+        case 0.15..<0.35:
+            return .yellow
+        default:
+            return .orange
+        }
     }
 }
 
