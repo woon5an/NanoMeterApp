@@ -1,4 +1,3 @@
-import SwiftUI
 
 private enum ExposureMode: String, CaseIterable, Identifiable {
     case table
