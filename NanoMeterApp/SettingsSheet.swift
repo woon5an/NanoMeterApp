@@ -49,9 +49,17 @@ struct SettingsSheet: View {
                     }
                 }
 
+                Section("矩阵热力图") {
+                    Toggle("显示热力矩阵叠加", isOn: $cameraService.isHeatmapEnabled)
+                    Text("默认关闭。开启后会在取景器上叠加 5x5 亮度热力可视化。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("亮度→EV 灰卡校准") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("将镜头对准 18% 灰卡，保持当前测光模式 \(cameraService.meteringMode.rawValue)，然后点击下方按钮。").font(.footnote)
+                        Text("将镜头对准 18% 灰卡，保持当前测光模式 \(cameraService.meteringMode.rawValue)，然后点击下方按钮。")
+                            .font(.footnote)
                         Button {
                             cameraService.calibrateGreyCard(using: cameraService.meteringMode)
                             showCalibrationToast = true
@@ -65,7 +73,9 @@ struct SettingsSheet: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("尚未校准，使用默认相对测光计算。").font(.caption).foregroundStyle(.secondary)
+                            Text("尚未校准，使用默认相对测光计算。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
 
                         Button("清除校准") {

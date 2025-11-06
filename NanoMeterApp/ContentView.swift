@@ -1,17 +1,17 @@
 import SwiftUI
 
 private enum ExposureMode: String, CaseIterable, Identifiable {
-    case manual
     case table
+    case manual
 
     var id: ExposureMode { self }
 
     var title: String {
         switch self {
-        case .manual:
-            return "手动调节"
         case .table:
             return "参考组合"
+        case .manual:
+            return "手动调节"
         }
     }
 }
@@ -27,7 +27,7 @@ struct ContentView: View {
     @State private var showHistory = false
     @State private var showSettings = false
     @State private var previewSize: CGSize = .zero
-    @State private var exposureMode: ExposureMode = .manual
+    @State private var exposureMode: ExposureMode = .table
 
     var body: some View {
         NavigationView {
@@ -287,24 +287,28 @@ struct ContentView: View {
     }
 
     private var heatmapOverlay: some View {
-        GeometryReader { geo in
-            let rows = cam.heatmapCells.count
-            let cols = cam.heatmapCells.first?.count ?? 0
-            if rows > 0, cols > 0 {
-                ForEach(0..<rows, id: \.self) { r in
-                    ForEach(0..<cols, id: \.self) { c in
-                        let cellWidth = geo.size.width / CGFloat(cols)
-                        let cellHeight = geo.size.height / CGFloat(rows)
-                        Rectangle()
-                            .fill(heatColor(for: cam.heatmapCells[r][c]).opacity(0.35))
-                            .frame(width: cellWidth, height: cellHeight)
-                            .position(x: (CGFloat(c) + 0.5) * cellWidth,
-                                      y: (CGFloat(r) + 0.5) * cellHeight)
+        Group {
+            if cam.isHeatmapEnabled {
+                GeometryReader { geo in
+                    let rows = cam.heatmapCells.count
+                    let cols = cam.heatmapCells.first?.count ?? 0
+                    if rows > 0, cols > 0 {
+                        ForEach(0..<rows, id: \.self) { r in
+                            ForEach(0..<cols, id: \.self) { c in
+                                let cellWidth = geo.size.width / CGFloat(cols)
+                                let cellHeight = geo.size.height / CGFloat(rows)
+                                Rectangle()
+                                    .fill(heatColor(for: cam.heatmapCells[r][c]).opacity(0.35))
+                                    .frame(width: cellWidth, height: cellHeight)
+                                    .position(x: (CGFloat(c) + 0.5) * cellWidth,
+                                              y: (CGFloat(r) + 0.5) * cellHeight)
+                            }
+                        }
                     }
                 }
+                .allowsHitTesting(false)
             }
         }
-        .allowsHitTesting(false)
     }
 
     private var spotOverlay: some View {
@@ -399,6 +403,12 @@ private struct EquivalentExposureTable: View {
         default:
             return .orange
         }
+    }
+
+private func heatColor(for value: CGFloat) -> Color {
+        let clamped = min(max(Double(value), 0.0), 1.0)
+        let hue = (1.0 - clamped) * 0.6 // 蓝 -> 黄 -> 红
+        return Color(hue: hue, saturation: 0.85, brightness: 0.95)
     }
 }
 

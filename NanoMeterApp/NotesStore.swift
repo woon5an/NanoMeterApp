@@ -44,6 +44,11 @@ final class NotesStore: ObservableObject {
         notes.removeAll { $0.id == note.id }
     }
 
+    func update(note: ExposureNote) {
+        guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
+        notes[index] = note
+    }
+
     func exportCSVDocument() -> NotesCSVDocument? {
         guard !notes.isEmpty else { return nil }
         var rows = ["Date,Aperture,Shutter,ISO,EV100,Latitude,Longitude"]

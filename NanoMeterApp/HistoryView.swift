@@ -12,6 +12,7 @@ struct HistoryView: View {
     @EnvironmentObject var notes: NotesStore
     @Environment(\.dismiss) var dismiss
     @State private var exportResult: String?
+    @State private var editingNote: ExposureNote?
 
     var body: some View {
         NavigationView {
@@ -44,6 +45,14 @@ struct HistoryView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 6)
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            Button {
+                                editingNote = n
+                            } label: {
+                                Label("编辑", systemImage: "square.and.pencil")
+                            }
+                            .tint(.blue)
+                        }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
                                 notes.delete(n)
@@ -52,6 +61,12 @@ struct HistoryView: View {
                             }
                         }
                         .contextMenu {
+                            Button {
+                                editingNote = n
+                            } label: {
+                                Label("编辑", systemImage: "square.and.pencil")
+                            }
+
                             Button {
                                 export(note: n)
                             } label: {
@@ -85,6 +100,12 @@ struct HistoryView: View {
             }, message: {
                 Text(exportResult ?? "")
             })
+            .sheet(item: $editingNote) { note in
+                NoteEditSheet(note: note) { updated in
+                    notes.update(note: updated)
+                    editingNote = nil
+                }
+            }
         }
     }
 
@@ -128,5 +149,87 @@ struct HistoryView: View {
                 }
             }
         }
+    }
+}
+
+private struct NoteEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let note: ExposureNote
+    let onSave: (ExposureNote) -> Void
+
+    @State private var aperture: String
+    @State private var shutter: String
+    @State private var iso: String
+    @State private var evText: String
+    @State private var date: Date
+
+    init(note: ExposureNote, onSave: @escaping (ExposureNote) -> Void) {
+        self.note = note
+        self.onSave = onSave
+        _aperture = State(initialValue: note.aperture)
+        _shutter = State(initialValue: note.shutter)
+        _iso = State(initialValue: note.iso)
+        _evText = State(initialValue: String(format: "%.2f", note.ev))
+        _date = State(initialValue: note.date)
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("拍摄时间") {
+                    DatePicker("时间", selection: $date)
+                        .datePickerStyle(.compact)
+                }
+
+                Section("曝光参数") {
+                    TextField("光圈", text: $aperture)
+                        .keyboardType(.decimalPad)
+                        .textInputAutocapitalization(.never)
+                    TextField("快门", text: $shutter)
+                        .textInputAutocapitalization(.never)
+                    TextField("ISO", text: $iso)
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                }
+
+                Section("EV100") {
+                    TextField("EV100", text: $evText)
+                        .keyboardType(.decimalPad)
+                        .textInputAutocapitalization(.never)
+                    Text("建议保留两位小数，方便与主界面读数对照。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("编辑笔记")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") { save() }
+                        .disabled(aperture.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                  shutter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                  iso.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        var updated = note
+        let trimmedAperture = aperture.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedShutter = shutter.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedISO = iso.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.aperture = trimmedAperture.isEmpty ? note.aperture : trimmedAperture
+        updated.shutter = trimmedShutter.isEmpty ? note.shutter : trimmedShutter
+        updated.iso = trimmedISO.isEmpty ? note.iso : trimmedISO
+        if let evValue = Double(evText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updated.ev = evValue
+        }
+        updated.date = date
+        onSave(updated)
+        dismiss()
     }
 }

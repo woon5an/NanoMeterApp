@@ -28,6 +28,11 @@ final class CameraService: NSObject, ObservableObject {
     @Published var meteringMode: MeteringMode = .matrix
     @Published var spotPoint: CGPoint = CGPoint(x: 0.5, y: 0.5) // 0~1 归一化坐标
     @Published var heatmapCells: [[CGFloat]]
+    @Published var isHeatmapEnabled: Bool {
+        didSet {
+            defaults.set(isHeatmapEnabled, forKey: heatmapEnabledKey)
+        }
+    }
     @Published var calibrationConstant: Double?
     @Published var effectiveAperture: Double
 
@@ -43,6 +48,7 @@ final class CameraService: NSObject, ObservableObject {
     private let customApertureKey = "nano.custom.aperture"
     private var detectedAperture: Double
     private var customAperture: Double?
+    private let heatmapEnabledKey = "nano.heatmap.enabled"
 
     override init() {
         detectedAperture = 1.8
@@ -59,6 +65,11 @@ final class CameraService: NSObject, ObservableObject {
         let initialAperture = customAperture ?? detectedAperture
         effectiveAperture = initialAperture
         heatmapCells = Array(repeating: Array(repeating: 0.5, count: grid.cols), count: grid.rows)
+        if let storedToggle = defaults.object(forKey: heatmapEnabledKey) as? Bool {
+            isHeatmapEnabled = storedToggle
+        } else {
+            isHeatmapEnabled = false
+        }
         super.init()
     }
 
