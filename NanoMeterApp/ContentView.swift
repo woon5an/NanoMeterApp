@@ -316,18 +316,9 @@ struct ContentView: View {
     private var spotOverlay: some View {
         Group {
             if cameraService.meteringMode == .spot {
-                GeometryReader { geo in
-                    let p = CGPoint(x: cameraService.spotPoint.x * geo.size.width,
-                                    y: cameraService.spotPoint.y * geo.size.height)
-                    Path { path in
-                        path.move(to: CGPoint(x: p.x - 24, y: p.y))
-                        path.addLine(to: CGPoint(x: p.x + 24, y: p.y))
-                        path.move(to: CGPoint(x: p.x, y: p.y - 24))
-                        path.addLine(to: CGPoint(x: p.x, y: p.y + 24))
-                    }
+                CrosshairShape(normalizedPoint: cameraService.spotPoint)
                     .stroke(Color.yellow.opacity(0.9), lineWidth: 2)
-                }
-                .allowsHitTesting(false)
+                    .allowsHitTesting(false)
             }
         }
     }
@@ -405,6 +396,26 @@ private struct ExposureSuggestionTable: View {
         default:
             return .orange
         }
+    }
+}
+
+private struct CrosshairShape: Shape {
+    var normalizedPoint: CGPoint
+
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(normalizedPoint.x, normalizedPoint.y) }
+        set { normalizedPoint = CGPoint(x: newValue.first, y: newValue.second) }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let p = CGPoint(x: normalizedPoint.x * rect.width,
+                        y: normalizedPoint.y * rect.height)
+        path.move(to: CGPoint(x: p.x - 24, y: p.y))
+        path.addLine(to: CGPoint(x: p.x + 24, y: p.y))
+        path.move(to: CGPoint(x: p.x, y: p.y - 24))
+        path.addLine(to: CGPoint(x: p.x, y: p.y + 24))
+        return path
     }
 }
 
