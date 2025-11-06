@@ -325,7 +325,7 @@ struct ContentView: View {
                         path.move(to: CGPoint(x: p.x, y: p.y - 24))
                         path.addLine(to: CGPoint(x: p.x, y: p.y + 24))
                     }
-                    .stroke(.yellow.opacity(0.9), lineWidth: 2)
+                    .stroke(Color.yellow.opacity(0.9), lineWidth: 2)
                 }
                 .allowsHitTesting(false)
             }
