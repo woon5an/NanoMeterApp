@@ -27,6 +27,9 @@ final class CameraService: NSObject, ObservableObject {
     @Published var exposureISO: Float = 100.0           // 当前相机 ISO
     @Published var meteringMode: MeteringMode = .matrix
     @Published var spotPoint: CGPoint = CGPoint(x: 0.5, y: 0.5) // 0~1 归一化坐标
+    @Published var heatmapCells: [[CGFloat]]
+    @Published var calibrationConstant: Double?
+    @Published var effectiveAperture: Double
 
     // 会话与输出
     let session = AVCaptureSession()
@@ -35,8 +38,27 @@ final class CameraService: NSObject, ObservableObject {
 
     // 画面分区参数
     private let grid = (rows: 5, cols: 5) // 矩阵 5x5
+    private let defaults = UserDefaults.standard
+    private let calibrationKey = "nano.calibration.constant"
+    private let customApertureKey = "nano.custom.aperture"
+    private var detectedAperture: Double
+    private var customAperture: Double?
 
     override init() {
+        detectedAperture = 1.8
+        if let stored = defaults.object(forKey: customApertureKey) as? Double, stored > 0 {
+            customAperture = stored
+        } else {
+            customAperture = nil
+        }
+        if let constant = defaults.object(forKey: calibrationKey) as? Double, constant > 0 {
+            calibrationConstant = constant
+        } else {
+            calibrationConstant = nil
+        }
+        let initialAperture = customAperture ?? detectedAperture
+        effectiveAperture = initialAperture
+        heatmapCells = Array(repeating: Array(repeating: 0.5, count: grid.cols), count: grid.rows)
         super.init()
     }
 
@@ -47,6 +69,11 @@ final class CameraService: NSObject, ObservableObject {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
         else { print("No camera"); return }
         self.device = device
+        let lens = Double(device.lensAperture)
+        if lens > 0 {
+            detectedAperture = lens
+            refreshEffectiveAperture()
+        }
 
         do {
             let input = try AVCaptureDeviceInput(device: device)
@@ -81,8 +108,8 @@ final class CameraService: NSObject, ObservableObject {
     }
 
     // 计算 EV100：由相机当前曝光（固定光圈）估计场景 EV
-    // iPhone 主摄光圈（示例）：f/1.78 ~ f/1.8，不同机型略有差异；可做成设置项
-    func currentEV100(aperture: Double = 1.8) -> Double {
+    func currentEV100(aperture: Double? = nil) -> Double {
+        let aperture = aperture ?? effectiveAperture
         let t = max(exposureDuration, 1e-6)
         let S = max(Double(exposureISO), 1.0)
         return log2((aperture * aperture) / t) - log2(S / 100.0)
@@ -90,15 +117,59 @@ final class CameraService: NSObject, ObservableObject {
 
     // 基于亮度的相对 EV 修正（把不同测光模式的亮度与全画面平均的亮度对比）
     func evForSelectedMode(baseEV: Double) -> Double {
-        let ref = max(Double(averageLuma), 1e-6)
         let luma: Double
         switch meteringMode {
         case .matrix:         luma = Double(matrixLuma)
         case .centerWeighted: luma = Double(centerWeightedLuma)
         case .spot:           luma = Double(spotLuma)
         }
+        if let constant = calibrationConstant {
+            return log2(max(luma, 1e-6) * constant)
+        }
+        let ref = max(Double(averageLuma), 1e-6)
         // 简单线性近似：EV += log2(luma / ref)
         return baseEV + log2(max(luma, 1e-6) / ref)
+    }
+
+    func calibrateGreyCard(using mode: MeteringMode) {
+        let luma: Double
+        switch mode {
+        case .matrix:         luma = Double(matrixLuma)
+        case .centerWeighted: luma = Double(centerWeightedLuma)
+        case .spot:           luma = Double(spotLuma)
+        }
+        let ev = currentEV100()
+        let constant = pow(2.0, ev) / max(luma, 1e-6)
+        DispatchQueue.main.async {
+            self.calibrationConstant = constant
+            self.defaults.set(constant, forKey: self.calibrationKey)
+        }
+    }
+
+    func clearCalibration() {
+        calibrationConstant = nil
+        defaults.removeObject(forKey: calibrationKey)
+    }
+
+    func setCustomAperture(_ value: Double?) {
+        if let value = value, value > 0 {
+            customAperture = value
+            defaults.set(value, forKey: customApertureKey)
+        } else {
+            customAperture = nil
+            defaults.removeObject(forKey: customApertureKey)
+        }
+        refreshEffectiveAperture()
+    }
+
+    var customApertureValue: Double? { customAperture }
+    var detectedApertureValue: Double? { detectedAperture }
+
+    private func refreshEffectiveAperture() {
+        let newValue = customAperture ?? detectedAperture
+        DispatchQueue.main.async {
+            self.effectiveAperture = newValue
+        }
     }
 }
 
@@ -148,9 +219,10 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
 
 
         // 矩阵中值（5x5）
-        func gridLumaMedian(rows: Int, cols: Int) -> CGFloat {
-            var cellMeans: [Double] = []
-            cellMeans.reserveCapacity(rows*cols)
+        func gridStats(rows: Int, cols: Int) -> (median: CGFloat, cells: [[CGFloat]]) {
+            var cellMeans = Array(repeating: Array(repeating: CGFloat(avg), count: cols), count: rows)
+            var flattened: [Double] = []
+            flattened.reserveCapacity(rows * cols)
             let cellW = max(1, width / cols)
             let cellH = max(1, height / rows)
             for r in 0..<rows {
@@ -173,12 +245,18 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                         }
                         y += stepY
                     }
-                    if cnt > 0 { cellMeans.append(sum / Double(cnt) / 255.0) }
+                    if cnt > 0 {
+                        let mean = sum / Double(cnt) / 255.0
+                        cellMeans[r][c] = CGFloat(mean)
+                        flattened.append(mean)
+                    } else {
+                        flattened.append(Double(avg))
+                    }
                 }
             }
-            guard !cellMeans.isEmpty else { return CGFloat(avg) }
-            cellMeans.sort()
-            return CGFloat(cellMeans[cellMeans.count/2])
+            guard !flattened.isEmpty else { return (CGFloat(avg), cellMeans) }
+            flattened.sort()
+            return (CGFloat(flattened[flattened.count/2]), cellMeans)
         }
 
         // 中加权（中心区域权重大）
@@ -226,15 +304,16 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
             return cnt > 0 ? CGFloat(sum / Double(cnt) / 255.0) : CGFloat(avg)
         }
 
-        let matrix = gridLumaMedian(rows: grid.rows, cols: grid.cols)
+        let stats = gridStats(rows: grid.rows, cols: grid.cols)
         let centerW = centerWeighted()
         let spot = spot(at: spotPoint)
 
         DispatchQueue.main.async {
             self.averageLuma = CGFloat(avg)
-            self.matrixLuma = matrix
+            self.matrixLuma = stats.median
             self.centerWeightedLuma = centerW
             self.spotLuma = spot
+            self.heatmapCells = stats.cells
         }
     }
 }
