@@ -207,7 +207,7 @@ struct ContentView: View {
                     ForEach(ExposureMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
-                    .stroke(.yellow.opacity(0.9), lineWidth: 2)
+                    .stroke(Color.yellow.opacity(0.9), lineWidth: 2)
                 }
                 .pickerStyle(.segmented)
 
